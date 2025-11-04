@@ -17,7 +17,7 @@ import socket, struct, time
 
 # ===================== CONFIG (EDIT HOST/PORT) =====================
 SERVER_HOST = '127.0.0.1'   # server IP or hostname
-ASSIGNED_PORT = 30077       # <-- REPLACE with your assigned UDP port
+ASSIGNED_PORT = 30038       # <-- REPLACE with your assigned UDP port
 SERVER = (SERVER_HOST, ASSIGNED_PORT)
 # ==================================================================
 
@@ -75,16 +75,35 @@ def send_recv_with_retry(sock, pkt, expect_types, expect_seq=None):
 
 def main():
     cli = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    seq = 0
 
-    # ============ PHASE 1: HANDSHAKE (YOU IMPLEMENT) ==============
-    # TODO:
-    #   - print('[CLIENT] SYN')
-    #   - send SYN (seq can be 0)
-    #   - wait (with retry) for SYN-ACK
-    #   - on success: print('[CLIENT] SYN-ACK')
-    #   - send final ACK and print('[CLIENT] Connection established')
-    # HINT: You can use send_recv_with_retry() to simplify retry logic.
-    pass  # <-- replace with your handshake code
+    # ============ PHASE 1: THREE-WAY HANDSHAKE ============
+    
+    # Step 1: Send SYN to initiate connection
+    print('[CLIENT] Initiating handshake - Sending SYN')
+    syn_pkt = pack_msg(SYN, seq)  # Initial sequence number is 0
+    
+    # Step 2: Wait for SYN-ACK from server
+    print('[CLIENT] Waiting for SYN-ACK response')
+    tp, s = send_recv_with_retry(cli, syn_pkt, expect_types=[SYN_ACK], expect_seq=0)
+    
+    # Check if SYN-ACK was received successfully
+    if tp != SYN_ACK:
+        print('[CLIENT] Handshake failed: No SYN-ACK received after maximum retries')
+        cli.close()
+        return
+    
+    print('[CLIENT] Received SYN-ACK from server')
+    
+    # Step 3: Send final ACK to complete handshake
+    seq += 1  # Increment sequence number for ACK
+    ack_pkt = pack_msg(ACK, seq)
+    cli.sendto(ack_pkt, SERVER)
+    print('[CLIENT] Sent ACK - Connection established')
+    
+    # Note: Using send_recv_with_retry() handles retransmissions automatically
+    # if packets are lost, implementing reliable connection establishment
+
     # ===============================================================
 
     # ============ PHASE 2: DATA SEND LOOP (YOU IMPLEMENT) =========

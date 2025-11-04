@@ -18,7 +18,7 @@ Tips:
 import socket, struct
 
 # ===================== CONFIG (EDIT YOUR PORT) =====================
-ASSIGNED_PORT = 30077  # <-- REPLACE with your assigned UDP port
+ASSIGNED_PORT = 30038  # <-- REPLACE with your assigned UDP port
 # ==================================================================
 
 # --- Protocol type codes (1 byte) ---
@@ -54,21 +54,33 @@ def main():
         if tp is None:
             continue
 
-        # ============ PHASE 1: HANDSHAKE (YOU IMPLEMENT) ============
+        # ============ PHASE 1: THREE-WAY HANDSHAKE ============
         if not established:
-            # TODO:
-            #  - If this is a SYN and we are not established:
-            #       * set client_addr = addr
-            #       * print('[SERVER] got SYN from', addr)
-            #       * send SYN-ACK to client_addr
-            #       * continue
-            #  - If this is the final ACK from the same client:
-            #       * print('[SERVER] handshake complete')
-            #       * established = True; expect_seq = 0
-            #       * continue
-            #  - Ignore packets from others until established
-            # HINT: Only accept packets from the first client that sent SYN
-            pass  # <-- replace with your handshake logic
+            # Step 1: Handle incoming SYN
+            if tp == SYN and client_addr is None:
+                # Store the client's address - only accept packets from this client
+                client_addr = addr
+                print('[SERVER] Received SYN from client:', addr)
+                
+                # Step 2: Send SYN-ACK response
+                syn_ack_pkt = pack_msg(SYN_ACK, 0)
+                sock.sendto(syn_ack_pkt, addr)
+                print('[SERVER] Sent SYN-ACK response')
+                
+                # Step 3: Wait for final ACK to complete handshake
+                pkt, addr = sock.recvfrom(2048)
+                tp, s, payload = unpack_msg(pkt)
+                
+                # Verify ACK is from the same client
+                if addr == client_addr and tp == ACK:
+                    print('[SERVER] Received ACK - Handshake complete')
+                    established = True
+                    expect_seq = 0  # Initialize sequence number for data phase
+                else:
+                    print('[SERVER] Invalid ACK received, handshake failed')
+                    client_addr = None  # Reset client address if handshake fails
+            
+            # Ignore packets from other clients during handshake
             continue
         # ============================================================
 
