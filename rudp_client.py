@@ -69,75 +69,51 @@ def send_recv_with_retry(sock, pkt, expect_types, expect_seq=None):
             if tp in expect_types and (expect_seq is None or s == expect_seq):
                 return tp, s
         except socket.timeout:
-            # retry on timeout
             continue
     return None, None
-
 def main():
     cli = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     seq = 0
 
     # ============ PHASE 1: THREE-WAY HANDSHAKE ============
-    
-    # Step 1: Send SYN to initiate connection
     print('[CLIENT] Initiating handshake - Sending SYN')
-    syn_pkt = pack_msg(SYN, seq)  # Initial sequence number is 0
-    
-    # Step 2: Wait for SYN-ACK from server
+    syn_pkt = pack_msg(SYN, seq)
     print('[CLIENT] Waiting for SYN-ACK response')
     tp, s = send_recv_with_retry(cli, syn_pkt, expect_types=[SYN_ACK], expect_seq=0)
-    
-    # Check if SYN-ACK was received successfully
     if tp != SYN_ACK:
         print('[CLIENT] Handshake failed: No SYN-ACK received after maximum retries')
         cli.close()
         return
-    
-    print('[CLIENT] Received SYN-ACK from server')
-    
-    # Step 3: Send final ACK to complete handshake
-    # Increment sequence number for ACK
+
     ack_pkt = pack_msg(ACK, seq + 1)
     cli.sendto(ack_pkt, SERVER)
-    print('[CLIENT] Sent ACK - Connection established')
-    
-    # Note: Using send_recv_with_retry() handles retransmissions automatically
-    # if packets are lost, implementing reliable connection establishment
-
+    print('[CLIENT] Connection established')
     # ===============================================================
 
-    # ============ PHASE 2: DATA SEND LOOP (YOU IMPLEMENT) =========
-    # TODO:
-    #   - Convert MESSAGE to bytes
+    # ============ PHASE 2: DATA SEND LOOP ==========================
     msg_bytes = MESSAGE.encode()
-    #   - Loop over CHUNK-sized slices; seq starts at 0 and increments
     seq = 0
-    for i in range(0, len(msg_bytes), CHUNK):
-    #   - For each chunk:
-        chunk = msg_bytes[i : CHUNK+i]
-    #       * print(f'[CLIENT] DATA seq={seq}')
+    for offset in range(0, len(msg_bytes), CHUNK):
+        chunk = msg_bytes[offset:offset + CHUNK]
         print(f'[CLIENT] DATA seq={seq}')
-    #       * send DATA, then wait (with retry) for DATA-ACK with same seq
         data_pkt = pack_msg(DATA, seq, chunk)
-        tp, s = send_recv_with_retry(cli, data_pkt, DATA_ACK, expect_seq=seq)
-    #       * on success print(f'[CLIENT] ACK seq={seq}')
-        if tp is None:
-            print('[CLIENT] Failed to get ACK for seq={seq}, aborting.')
-            break
-
+        tp, s = send_recv_with_retry(cli, data_pkt, expect_types=[DATA_ACK], expect_seq=seq)
+        if tp != DATA_ACK:
+            print(f'[CLIENT] Failed to get ACK for seq={seq}, aborting.')
+            cli.close()
+            return
         print(f'[CLIENT] ACK seq={seq}')
-        seq+= 1
-
-    #       * on failure, exit with a message
-    pass  # <-- replace with your data send loop
+        seq += 1
     # ===============================================================
 
-    # ============ PHASE 3: TEARDOWN (YOU IMPLEMENT) ===============
-    # TODO:
-    #   - print('[CLIENT] FIN')
-    #   - send FIN and wait (with retry) for FIN-ACK
-    #   - on success print('[CLIENT] Connection closed')
-    pass  # <-- replace with your teardown code
+    # ============ PHASE 3: TEARDOWN ================================
+    print('[CLIENT] FIN')
+    fin_pkt = pack_msg(FIN, 0)
+    tp, s = send_recv_with_retry(cli, fin_pkt, expect_types=[FIN_ACK])
+    if tp == FIN_ACK:
+        print('[CLIENT] Connection closed')
+    else:
+        print('[CLIENT] FIN-ACK not received, closing anyway')
     # ===============================================================
 
     cli.close()

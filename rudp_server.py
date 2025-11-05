@@ -15,7 +15,7 @@ Tips:
   - Keep the server single-client and single-threaded for simplicity.
   - Only accept packets from the first client after handshake begins.
 """
-import socket, struct
+import socket, struct, random, time
 
 # ===================== CONFIG (EDIT YOUR PORT) =====================
 ASSIGNED_PORT = 30038  # <-- REPLACE with your assigned UDP port
@@ -56,58 +56,71 @@ def main():
 
         # ============ PHASE 1: THREE-WAY HANDSHAKE ============
         if not established:
-            # Step 1: Handle incoming SYN
             if tp == SYN and client_addr is None:
-                # Store the client's address - only accept packets from this client
                 client_addr = addr
                 print('[SERVER] Received SYN from client:', addr)
-                
-                # Step 2: Send SYN-ACK response
                 syn_ack_pkt = pack_msg(SYN_ACK, 0)
                 sock.sendto(syn_ack_pkt, addr)
                 print('[SERVER] Sent SYN-ACK response')
-                
-                # Step 3: Wait for final ACK to complete handshake
-                pkt, addr = sock.recvfrom(2048)
-                tp, s, payload = unpack_msg(pkt)
-                
-                # Verify ACK is from the same client
-                if addr == client_addr and tp == ACK:
+
+                pkt, addr2 = sock.recvfrom(2048)
+                tp2, s2, payload2 = unpack_msg(pkt)
+                if addr2 == client_addr and tp2 == ACK:
                     print('[SERVER] Received ACK - Handshake complete')
                     established = True
+                    expect_seq = 0
                 else:
                     print('[SERVER] Invalid ACK received, handshake failed')
-                    client_addr = None  # Reset client address if handshake fails
-            
-            # Ignore packets from other clients during handshake
+                    client_addr = None
             continue
         # ============================================================
 
         # Ignore packets from other addresses once a client is set
         if client_addr is not None and addr != client_addr:
-            # Optional: silently ignore or print a message
             continue
 
-        # ============ PHASE 2: DATA (YOU IMPLEMENT) =================
+        # ============ PHASE 2: DATA ================================
         if tp == DATA:
-            # TODO:
-            #   - If seq == expect_seq:
-            #       * "deliver" the payload (e.g., print it as text)
-            #       * send DATA-ACK with the same seq
-            #       * expect_seq += 1
-            #   - Else (out-of-order):
-            #       * re-ACK the last in-order packet (expect_seq - 1)
-            pass  # <-- replace with your data logic
+            if seq == expect_seq:
+                # "Deliver" payload
+                try:
+                    text = pl.decode(errors='replace')
+                except Exception:
+                    text = str(pl)
+                print(f'[SERVER] DATA seq={seq} len={len(pl)}')
+                if text:
+                    print(text, end='')
+
+                # Random delay before ACK (100–1000 ms)
+                delay_ms = random.randint(100, 1000)
+                time.sleep(delay_ms / 1000.0)
+
+                # Send ACK for this seq
+                ack_pkt = pack_msg(DATA_ACK, seq)
+                sock.sendto(ack_pkt, client_addr)
+                print(f'[SERVER] Sent DATA-ACK seq={seq} (delay {delay_ms} ms)')
+                expect_seq += 1
+            else:
+                # Out-of-order/duplicate: re-ACK last in-order
+                last_in_order = expect_seq - 1
+                if last_in_order < 0:
+                    last_in_order = 0
+                ack_pkt = pack_msg(DATA_ACK, last_in_order)
+                sock.sendto(ack_pkt, client_addr)
+                print(f'[SERVER] Re-ACK seq={last_in_order} (received {seq})')
             continue
         # ============================================================
 
-        # ============ PHASE 3: TEARDOWN (YOU IMPLEMENT) =============
+        # ============ PHASE 3: TEARDOWN =============================
         if tp == FIN:
-            # TODO:
-            #   - print('[SERVER] FIN received, closing')
-            #   - send FIN-ACK to client_addr
-            #   - reset state: established=False; client_addr=None; expect_seq=0
-            pass  # <-- replace with your teardown logic
+            print('[SERVER] FIN received, closing')
+            fin_ack_pkt = pack_msg(FIN_ACK, 0)
+            sock.sendto(fin_ack_pkt, client_addr)
+            print('[SERVER] Connection closed')
+            # Reset state for next client
+            established = False
+            client_addr = None
+            expect_seq = 0
             continue
         # ============================================================
 
