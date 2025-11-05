@@ -75,7 +75,6 @@ def main():
                 if addr == client_addr and tp == ACK:
                     print('[SERVER] Received ACK - Handshake complete')
                     established = True
-                    expect_seq = 0  # Initialize sequence number for data phase
                 else:
                     print('[SERVER] Invalid ACK received, handshake failed')
                     client_addr = None  # Reset client address if handshake fails

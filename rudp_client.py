@@ -96,8 +96,8 @@ def main():
     print('[CLIENT] Received SYN-ACK from server')
     
     # Step 3: Send final ACK to complete handshake
-    seq += 1  # Increment sequence number for ACK
-    ack_pkt = pack_msg(ACK, seq)
+    # Increment sequence number for ACK
+    ack_pkt = pack_msg(ACK, seq + 1)
     cli.sendto(ack_pkt, SERVER)
     print('[CLIENT] Sent ACK - Connection established')
     
@@ -109,11 +109,25 @@ def main():
     # ============ PHASE 2: DATA SEND LOOP (YOU IMPLEMENT) =========
     # TODO:
     #   - Convert MESSAGE to bytes
+    msg_bytes = MESSAGE.encode()
     #   - Loop over CHUNK-sized slices; seq starts at 0 and increments
+    seq = 0
+    for i in range(0, len(msg_bytes), CHUNK):
     #   - For each chunk:
+        chunk = msg_bytes[i : CHUNK+i]
     #       * print(f'[CLIENT] DATA seq={seq}')
+        print(f'[CLIENT] DATA seq={seq}')
     #       * send DATA, then wait (with retry) for DATA-ACK with same seq
+        data_pkt = pack_msg(DATA, seq, chunk)
+        tp, s = send_recv_with_retry(cli, data_pkt, DATA_ACK, expect_seq=seq)
     #       * on success print(f'[CLIENT] ACK seq={seq}')
+        if tp is None:
+            print('[CLIENT] Failed to get ACK for seq={seq}, aborting.')
+            break
+
+        print(f'[CLIENT] ACK seq={seq}')
+        seq+= 1
+
     #       * on failure, exit with a message
     pass  # <-- replace with your data send loop
     # ===============================================================
